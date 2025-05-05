@@ -235,46 +235,53 @@ if page == "4":
 
     today_code = datetime.now().strftime("%m%d")
     today_num = int(today_code)
-    found = False
+
+    grouped_tasks = {}  # {(task, project): [subtasks]}
 
     for idx, task in enumerate(st.session_state.tasks):
         for sub_idx, subtask in enumerate(task["subtasks"]):
             sub_num = int(subtask["date_code"])
             status = subtask["status"]
 
-            # Skip if it's completed and not today
-            if status == "Completed" and sub_num < today_num:
-                continue
+            # Show only tasks due today or overdue (and not yet completed)
+            if sub_num <= today_num and not (status == "Completed" and sub_num < today_num):
+                key = (task["task"], task["project"])
+                if key not in grouped_tasks:
+                    grouped_tasks[key] = []
+                grouped_tasks[key].append((sub_idx, subtask, idx))  # (sub_idx, subtask, task_idx)
 
-            if sub_num <= today_num:
-                if not found:
-                    st.markdown(f"### Tasks for {datetime.now().strftime('%B %d')} and earlier")
-                    found = True
+    if not grouped_tasks:
+        st.info("No subtasks due today or earlier.")
+    else:
+        for (task_name, project_name), sublist in grouped_tasks.items():
+            st.markdown(f"### 🔹 From Task: *{task_name}*, Project: *{project_name}*")
+            for sub_idx, subtask, task_idx in sublist:
+                col1, col2 = st.columns([6, 1])
+                with col1:
+                    status = subtask["status"]
+                    title = subtask["title"]
 
-                c1, c2 = st.columns([6, 1])
-                with c1:
-                    content = f"{subtask['title']} (from Task: *{task['task']}*, Project: *{task['project']}*)"
                     if status == "Completed":
-                        st.markdown(f"<span style='color:gray'><s>{content}</s></span>", unsafe_allow_html=True)
-                    elif sub_num < today_num:
-                        st.markdown(f"<span style='color:red'>[Overdue] {content}</span>", unsafe_allow_html=True)
+                        st.markdown(f"<span style='color:gray'><s>{title}</s></span>", unsafe_allow_html=True)
+                    elif int(subtask["date_code"]) < today_num:
+                        st.markdown(f"<span style='color:red'>[Overdue] {title}</span>", unsafe_allow_html=True)
                     else:
-                        st.markdown(f"**{content}**")
+                        st.markdown(f"**{title}**")
 
-                with c2:
+                with col2:
                     if status != "Completed":
-                        if st.button("✅", key=f"complete-today-{idx}-{sub_idx}"):
-                            subtask["status"] = "Completed"
+                        if st.button("✅", key=f"complete-today-{task_idx}-{sub_idx}"):
+                            st.session_state.tasks[task_idx]["subtasks"][sub_idx]["status"] = "Completed"
+
+                            # Update DB
                             conn = sqlite3.connect("tasks.db")
                             c = conn.cursor()
                             c.execute("UPDATE tasks SET subtasks = ? WHERE project = ? AND task = ?",
-                                      (json.dumps(task["subtasks"]), task["project"], task["task"]))
+                                      (json.dumps(st.session_state.tasks[task_idx]["subtasks"]),
+                                       project_name, task_name))
                             conn.commit()
                             conn.close()
                             st.rerun()
-
-    if not found:
-        st.info("No subtasks due today or earlier.")
 
 # --- Part 5: Project Overview Page ---
 if page == "5":
