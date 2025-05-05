@@ -123,9 +123,9 @@ if st.button("⬅️ Back to Dashboard", key="back-dashboard"):
 if page == "2":
     st.title("➕ Create a New Task")
 
-    project = st.text_input("Project Name (highest level)")
-    task = st.text_input("Task (experiment step inside a project)")
-    description = st.text_area("Task Description (with subtasks)")
+    project = st.text_input("Project Name")
+    task = st.text_input("Task")
+    description = st.text_area("Task Description (or steps)")
     status = st.selectbox("Status", ["Not Started", "In Progress", "Completed"])
 
     if st.button("Save Task"):
