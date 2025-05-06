@@ -1,17 +1,64 @@
-# Part 1: Setup, DB, and Navigation
+# --- Streamlit Protocol Tracker with Dropbox Persistence ---
 import streamlit as st
-import sqlite3
 import json
 import re
 import pandas as pd
 from datetime import datetime
+from io import StringIO
+import dropbox
 
-# --- Extract subtasks from description ---
+# --- Dropbox Setup ---
+DROPBOX_ACCESS_TOKEN = st.secrets["dropbox"]["access_token"]
+DROPBOX_FILE_PATH = "/protocol_tracker/protocol_log.csv"
+dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
+
+def append_to_dropbox_csv(project, task, description, status, subtasks):
+    new_data = pd.DataFrame([{
+        "Timestamp": datetime.now().isoformat(),
+        "Project": project,
+        "Task": task,
+        "Description": description,
+        "Status": status,
+        "Subtasks": json.dumps(subtasks)
+    }])
+    try:
+        _, res = dbx.files_download(DROPBOX_FILE_PATH)
+        existing = pd.read_csv(StringIO(res.content.decode()))
+    except dropbox.exceptions.ApiError:
+        existing = pd.DataFrame(columns=["Timestamp", "Project", "Task", "Description", "Status", "Subtasks"])
+
+    updated = pd.concat([existing, new_data], ignore_index=True)
+    buffer = StringIO()
+    updated.to_csv(buffer, index=False)
+    dbx.files_upload(buffer.getvalue().encode(), DROPBOX_FILE_PATH, mode=dropbox.files.WriteMode.overwrite)
+
+def load_tasks_from_dropbox():
+    try:
+        _, res = dbx.files_download(DROPBOX_FILE_PATH)
+        df = pd.read_csv(StringIO(res.content.decode()))
+    except dropbox.exceptions.ApiError:
+        df = pd.DataFrame(columns=["Timestamp", "Project", "Task", "Description", "Status", "Subtasks"])
+
+    latest_tasks = {}
+    for _, row in df.iterrows():
+        key = (row["Project"], row["Task"])
+        latest_tasks[key] = row
+
+    tasks = []
+    for (project, task), row in latest_tasks.items():
+        tasks.append({
+            "project": project,
+            "task": task,
+            "description": row["Description"],
+            "status": row["Status"],
+            "subtasks": json.loads(row["Subtasks"]) if pd.notna(row["Subtasks"]) else []
+        })
+    return tasks
+
 def extract_subtasks(description_text):
     subtasks = []
     pattern = r"(\d{4}):\s*(.+)"
     matches = re.findall(pattern, description_text)
-
     for code, text in matches:
         month = int(code[:2])
         day = int(code[2:])
@@ -28,54 +75,17 @@ def extract_subtasks(description_text):
         })
     return subtasks
 
-# --- DB Setup ---
-def init_db():
-    conn = sqlite3.connect("tasks.db")
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            project TEXT,
-            task TEXT,
-            description TEXT,
-            status TEXT,
-            subtasks TEXT
-        )
-    ''')
-    conn.commit()
-    conn.close()
-
-def load_tasks_from_db():
-    conn = sqlite3.connect("tasks.db")
-    c = conn.cursor()
-    c.execute("SELECT project, task, description, status, subtasks FROM tasks")
-    rows = c.fetchall()
-    conn.close()
-
-    tasks = []
-    for row in rows:
-        project, task, description, status, subtasks_json = row
-        subtasks = json.loads(subtasks_json)
-        tasks.append({
-            "project": project,
-            "task": task,
-            "description": description,
-            "status": status,
-            "subtasks": subtasks
-        })
-    return tasks
-
-init_db()
+# --- Session Initialization ---
 if "tasks" not in st.session_state:
-    st.session_state.tasks = load_tasks_from_db()
+    st.session_state.tasks = load_tasks_from_dropbox()
 if "edit_mode" not in st.session_state:
     st.session_state.edit_mode = {}
 
-# --- Read page from query params (default to Dashboard) ---
+# --- Page Router ---
+st.set_page_config(page_title="Protocol Tracker", layout="wide")
 query_params = st.query_params
-page = query_params.get("page", ["Dashboard"])[0]
+page = query_params.get("page", ["1 Dashboard"])[0]
 
-# --- Manual navigation buttons in sidebar ---
 st.sidebar.title("Navigation")
 if st.sidebar.button("🏠 Dashboard"):
     st.query_params.update({"page": "1 Dashboard"})
@@ -86,43 +96,13 @@ if st.sidebar.button("➕ Create Task"):
 if st.sidebar.button("📋 Current Tasks"):
     st.query_params.update({"page": "3 Current Tasks"})
     st.rerun()
-if st.sidebar.button("📅 Daily Tasks"):
+if st.sidebar.button("📅 Today's Subtasks"):
     st.query_params.update({"page": "4 Daily Tasks"})
     st.rerun()
-if st.sidebar.button("📂 Project Overview"):
-    st.query_params.update({"page": "5 Project Overview"})
-    st.rerun()
 
-# --- Export Button ---
-def export_all_tasks_to_csv(filename="all_tasks_export.csv"):
-    conn = sqlite3.connect("tasks.db")
-    c = conn.cursor()
-    c.execute("SELECT project, task, description, status, subtasks FROM tasks")
-    rows = c.fetchall()
-    conn.close()
-
-    def format_subtasks(subtask_json):
-        try:
-            subtasks = json.loads(subtask_json)
-            return "\n".join([f"{s.get('date_str', '?')}: {s.get('title', '?')} [{s.get('status', '?')}]" for s in subtasks])
-        except:
-            return "[Invalid subtasks]"
-
-    data = [[p, t, d, s, format_subtasks(subs)] for p, t, d, s, subs in rows]
-    df = pd.DataFrame(data, columns=["Project", "Task", "Description", "Status", "Subtasks"])
-    df.to_csv(filename, index=False)
-    return filename
-
-st.markdown("---")
-if st.button("⬅️ Back to Dashboard", key="back-dashboard"):
-    st.query_params.update({"page": "1"})  # Assuming "1" maps to Dashboard
-    st.rerun()
-
-
-# --- Part 2: Create Task Page ---
+# --- Create Task Page ---
 if page == "2":
     st.title("➕ Create a New Task")
-
     project = st.text_input("Project Name")
     task = st.text_input("Task")
     description = st.text_area("Task Description (or steps)")
@@ -131,15 +111,6 @@ if page == "2":
     if st.button("Save Task"):
         if project and task:
             subtasks = extract_subtasks(description)
-            conn = sqlite3.connect("tasks.db")
-            c = conn.cursor()
-            c.execute('''
-                INSERT INTO tasks (project, task, description, status, subtasks)
-                VALUES (?, ?, ?, ?, ?)''',
-                (project, task, description, status, json.dumps(subtasks)))
-            conn.commit()
-            conn.close()
-
             st.session_state.tasks.append({
                 "project": project,
                 "task": task,
@@ -147,95 +118,67 @@ if page == "2":
                 "status": status,
                 "subtasks": subtasks
             })
+            append_to_dropbox_csv(project, task, description, status, subtasks)
             st.success(f"Task '{task}' under project '{project}' saved!")
             st.rerun()
         else:
             st.warning("Please fill in both Project and Task fields.")
 
-# --- Part 3: Current Tasks Page ---
+# --- Current Tasks Page ---
 if page == "3":
     st.title("📋 Current Tasks")
 
-    st.markdown("---")
-    st.markdown("### 📤 Export All Tasks")
-    if st.button("Export All Tasks to CSV", key="export-csv"):
-        filename = export_all_tasks_to_csv()
-        st.success(f"Tasks exported to `{filename}`")
-        with open(filename, "rb") as f:
-            st.download_button("⬇️ Download CSV", f, file_name=filename, mime="text/csv", key="download-csv")
+    projects = sorted(set(t["project"] for t in st.session_state.tasks if t["status"] != "Deleted"))
+    selected_project = st.selectbox("Filter by Project", ["All Projects"] + projects)
 
-    if st.session_state.tasks:
-        projects = sorted(set(t["project"] for t in st.session_state.tasks))
-        selected_project = st.selectbox("Filter by Project", ["All Projects"] + projects)
+    filtered_tasks = [
+        t for t in st.session_state.tasks
+        if (selected_project == "All Projects" or t["project"] == selected_project)
+           and t["status"] != "Deleted"
+    ]
 
-        filtered = [t for t in st.session_state.tasks if selected_project == "All Projects" or t["project"] == selected_project]
-        tasks = sorted(t["task"] for t in filtered)
-        selected_task = st.selectbox("Filter by Task", ["All Tasks"] + tasks)
+    for idx, task in enumerate(filtered_tasks):
+        st.markdown(f"### 🗂️ {task['task']} ({task['project']})")
+        st.markdown(f"**Status:** {task['status']}")
+        st.markdown(f"**Description:** {task['description']}")
 
-        if selected_task != "All Tasks":
-            filtered = [t for t in filtered if t["task"] == selected_task]
+        if task["subtasks"]:
+            st.markdown("**Subtasks:**")
+            for sub_idx, sub in enumerate(task["subtasks"]):
+                s1, s2 = st.columns([10, 1])
+                with s1:
+                    st.markdown(f"- [{sub['status']}] **{sub['date_str']}**: {sub['title']}")
+                with s2:
+                    if st.button("✅", key=f"complete-{idx}-{sub_idx}"):
+                        sub["status"] = "Completed"
+                        append_to_dropbox_csv(task["project"], task["task"], task["description"], task["status"], task["subtasks"])
+                        st.rerun()
 
-        for idx, task in enumerate(filtered):
-            col_main, col_del, col_edit = st.columns([10, 1, 1])
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            if st.button("✏️ Edit", key=f"edit-{idx}"):
+                st.session_state.edit_mode[idx] = True
+        with col2:
+            if st.button("🗑️ Delete", key=f"delete-{idx}"):
+                append_to_dropbox_csv(task["project"], task["task"], task["description"], "Deleted", task["subtasks"])
+                st.session_state.tasks.pop(idx)
+                st.rerun()
 
-            with col_main:
-                st.markdown(f"### 🗂️ {task['task']} ({task['project']})")
-                st.markdown(f"**Main Status:** {task['status']}")
-                if task["subtasks"]:
-                    st.markdown("**Subtasks:**")
-                    for sub_idx, sub in enumerate(task["subtasks"]):
-                        s1, s2 = st.columns([20, 1])
-                        with s1:
-                            st.markdown(f"- [{sub['status']}] **{sub['date_str']}**: {sub['title']}")
-                        with s2:
-                            if st.button("✅", key=f"complete-{idx}-{sub_idx}"):
-                                task["subtasks"][sub_idx]["status"] = "Completed"
-                                conn = sqlite3.connect("tasks.db")
-                                c = conn.cursor()
-                                c.execute("UPDATE tasks SET subtasks = ? WHERE project = ? AND task = ?", (json.dumps(task["subtasks"]), task["project"], task["task"]))
-                                conn.commit()
-                                conn.close()
-                                st.rerun()
+        if st.session_state.edit_mode.get(idx, False):
+            new_desc = st.text_area("Edit Description", value=task["description"], key=f"desc-edit-{idx}")
+            if st.button("💾 Save", key=f"save-{idx}"):
+                new_subtasks = extract_subtasks(new_desc)
+                task["description"] = new_desc
+                task["subtasks"] = new_subtasks
+                append_to_dropbox_csv(task["project"], task["task"], new_desc, task["status"], new_subtasks)
+                st.session_state.edit_mode[idx] = False
+                st.rerun()
 
-            with col_del:
-                if st.button("🗑️", key=f"delete-{idx}"):
-                    conn = sqlite3.connect("tasks.db")
-                    c = conn.cursor()
-                    c.execute("DELETE FROM tasks WHERE project = ? AND task = ?", (task["project"], task["task"]))
-                    conn.commit()
-                    conn.close()
-                    st.session_state.tasks.pop(idx)
-                    st.rerun()
-
-            with col_edit:
-                if st.button("✏️", key=f"edit-{idx}"):
-                    st.session_state.edit_mode[idx] = True
-
-            if st.session_state.edit_mode.get(idx, False):
-                st.markdown("**Edit Task Description:**")
-                new_desc = st.text_area("Description", value=task["description"], key=f"edit-desc-{idx}")
-                if st.button("💾 Save Changes", key=f"save-{idx}"):
-                    new_subtasks = extract_subtasks(new_desc)
-                    task["description"] = new_desc
-                    task["subtasks"] = new_subtasks
-                    conn = sqlite3.connect("tasks.db")
-                    c = conn.cursor()
-                    c.execute("UPDATE tasks SET description = ?, subtasks = ? WHERE project = ? AND task = ?", (new_desc, json.dumps(new_subtasks), task["project"], task["task"]))
-                    conn.commit()
-                    conn.close()
-                    st.success("✅ Task updated.")
-                    st.session_state.edit_mode[idx] = False
-                    st.rerun()
-    else:
-        st.info("No tasks available.")
-
-# --- Part 4: Daily Tasks Page ---
+# --- Daily Tasks Page ---
 if page == "4":
     st.title("📅 Today's Subtasks")
-    
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
 
+    from zoneinfo import ZoneInfo
     now_central = datetime.now(ZoneInfo("America/Chicago"))
     today_code = now_central.strftime("%m%d")
     today_num = int(today_code)
@@ -243,16 +186,17 @@ if page == "4":
     grouped_tasks = {}  # {(task, project): [subtasks]}
 
     for idx, task in enumerate(st.session_state.tasks):
+        if task["status"] == "Deleted":
+            continue
         for sub_idx, subtask in enumerate(task["subtasks"]):
             sub_num = int(subtask["date_code"])
             status = subtask["status"]
 
-            # Show only tasks due today or overdue (and not yet completed)
             if sub_num <= today_num and not (status == "Completed" and sub_num < today_num):
                 key = (task["task"], task["project"])
                 if key not in grouped_tasks:
                     grouped_tasks[key] = []
-                grouped_tasks[key].append((sub_idx, subtask, idx))  # (sub_idx, subtask, task_idx)
+                grouped_tasks[key].append((sub_idx, subtask, idx))
 
     if not grouped_tasks:
         st.info("No subtasks due today or earlier.")
@@ -264,7 +208,6 @@ if page == "4":
                 with col1:
                     status = subtask["status"]
                     title = subtask["title"]
-
                     if status == "Completed":
                         st.markdown(f"<span style='color:gray'><s>{title}</s></span>", unsafe_allow_html=True)
                     elif int(subtask["date_code"]) < today_num:
@@ -276,33 +219,36 @@ if page == "4":
                     if status != "Completed":
                         if st.button("✅", key=f"complete-today-{task_idx}-{sub_idx}"):
                             st.session_state.tasks[task_idx]["subtasks"][sub_idx]["status"] = "Completed"
-
-                            # Update DB
-                            conn = sqlite3.connect("tasks.db")
-                            c = conn.cursor()
-                            c.execute("UPDATE tasks SET subtasks = ? WHERE project = ? AND task = ?",
-                                      (json.dumps(st.session_state.tasks[task_idx]["subtasks"]),
-                                       project_name, task_name))
-                            conn.commit()
-                            conn.close()
+                            append_to_dropbox_csv(
+                                st.session_state.tasks[task_idx]["project"],
+                                st.session_state.tasks[task_idx]["task"],
+                                st.session_state.tasks[task_idx]["description"],
+                                st.session_state.tasks[task_idx]["status"],
+                                st.session_state.tasks[task_idx]["subtasks"]
+                            )
                             st.rerun()
+
 
 # --- Part 5: Project Overview Page ---
 if page == "5":
     st.title("📂 Project Overview")
 
-    if st.session_state.tasks:
+    filtered_tasks = [t for t in st.session_state.tasks if t["status"] != "Deleted"]
+
+    if filtered_tasks:
         projects = {}
-        for task in st.session_state.tasks:
+        for task in filtered_tasks:
             projects.setdefault(task["project"], []).append(task)
 
-        cols = st.columns(len(projects))
+        cols = st.columns(len(projects)) if len(projects) <= 4 else st.columns(4)
 
-        for col, (project, task_list) in zip(cols, sorted(projects.items())):
+        for col, (project, task_list) in zip(cols * (len(projects) // len(cols) + 1), sorted(projects.items())):
             with col:
                 st.markdown(f"### {project}")
                 for task in task_list:
                     with st.expander(f"📄 {task['task']}"):
+                        st.markdown(f"**Status:** {task['status']}")
+                        st.markdown(f"**Description:** {task['description']}")
                         if task["subtasks"]:
                             st.markdown("**Subtasks:**")
                             for sub in task["subtasks"]:
@@ -313,11 +259,15 @@ if page == "5":
                                     color = "orange"
                                 else:
                                     color = "red"
-                                st.markdown(f"<span style='color:{color}'>[{status}] {sub['date_str']}: {sub['title']}</span>", unsafe_allow_html=True)
+                                st.markdown(
+                                    f"<span style='color:{color}'>[{status}] {sub['date_str']}: {sub['title']}</span>",
+                                    unsafe_allow_html=True,
+                                )
                         else:
                             st.markdown("_No subtasks found._")
     else:
-        st.info("No projects or tasks yet.")
+        st.info("No projects or tasks available.")
+
 
 # --- Part 6: Dashboard Page ---
 if page == "1":
