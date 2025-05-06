@@ -181,22 +181,22 @@ if page == "3":
 if page == "4":
     st.title("📅 Today's Subtasks")
 
-    from zoneinfo import ZoneInfo
     now_central = datetime.now(ZoneInfo("America/Chicago"))
     today_code = now_central.strftime("%m%d")
     today_num = int(today_code)
 
     grouped_tasks = {}
-    
+
     for idx, task in enumerate(st.session_state.tasks):
         if task["status"] == "Deleted":
             continue
-    
+
         for sub_idx, subtask in enumerate(task["subtasks"]):
             sub_num = int(subtask["date_code"])
             status = subtask["status"]
-    
-            if sub_num <= today_num and status != "Completed":
+
+            # Show only if due today or overdue
+            if sub_num <= today_num:
                 key = (task["task"], task["project"])
                 grouped_tasks.setdefault(key, []).append((sub_idx, subtask, idx))
 
@@ -210,6 +210,7 @@ if page == "4":
                 with col1:
                     status = subtask["status"]
                     title = subtask["title"]
+
                     if status == "Completed":
                         st.markdown(f"<span style='color:gray'><s>{title}</s></span>", unsafe_allow_html=True)
                     elif int(subtask["date_code"]) < today_num:
@@ -229,8 +230,7 @@ if page == "4":
                                 st.session_state.tasks[task_idx]["subtasks"]
                             )
                             st.rerun()
-
-
+                            
 # --- Part 5: Project Overview Page ---
 if page == "5":
     st.title("📂 Project Overview")
