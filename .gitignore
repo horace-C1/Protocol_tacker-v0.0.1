@@ -1,0 +1,17 @@
+# Ignore secrets
+.streamlit/secrets.toml
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore virtual environments (optional)
+venv/
+.env/
+git add .gitignore
+git commit -m "Add .gitignore to exclude secrets and temporary files"
+git push
