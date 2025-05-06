@@ -232,8 +232,12 @@ if page == "3":
 # --- Part 4: Daily Tasks Page ---
 if page == "4":
     st.title("📅 Today's Subtasks")
+    
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
 
-    today_code = datetime.now().strftime("%m%d")
+    now_central = datetime.now(ZoneInfo("America/Chicago"))
+    today_code = now_central.strftime("%m%d")
     today_num = int(today_code)
 
     grouped_tasks = {}  # {(task, project): [subtasks]}
