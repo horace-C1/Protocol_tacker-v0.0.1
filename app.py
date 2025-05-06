@@ -21,6 +21,12 @@ def get_dropbox_client_from_refresh():
     response.raise_for_status()
     access_token = response.json()["access_token"]
     return dropbox.Dropbox(access_token)
+    
+# ✅ Get Dropbox client once
+dbx = get_dropbox_client_from_refresh()
+
+# ✅ Define your Dropbox file path here
+DROPBOX_FILE_PATH = "/protocol_tracker/protocol_log.csv"
 
 # Call this early in your app
 dbx = get_dropbox_client_from_refresh()
