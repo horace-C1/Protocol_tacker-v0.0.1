@@ -186,20 +186,19 @@ if page == "4":
     today_code = now_central.strftime("%m%d")
     today_num = int(today_code)
 
-    grouped_tasks = {}  # {(task, project): [subtasks]}
-
+    grouped_tasks = {}
+    
     for idx, task in enumerate(st.session_state.tasks):
         if task["status"] == "Deleted":
             continue
+    
         for sub_idx, subtask in enumerate(task["subtasks"]):
             sub_num = int(subtask["date_code"])
             status = subtask["status"]
-
-            if sub_num <= today_num and not (status == "Completed" and sub_num < today_num):
+    
+            if sub_num <= today_num and status != "Completed":
                 key = (task["task"], task["project"])
-                if key not in grouped_tasks:
-                    grouped_tasks[key] = []
-                grouped_tasks[key].append((sub_idx, subtask, idx))
+                grouped_tasks.setdefault(key, []).append((sub_idx, subtask, idx))
 
     if not grouped_tasks:
         st.info("No subtasks due today or earlier.")
