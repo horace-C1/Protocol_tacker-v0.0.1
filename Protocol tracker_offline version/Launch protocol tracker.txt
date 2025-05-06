@@ -1,0 +1,9 @@
+@echo off
+echo Launching Protocol Tracker App...
+cd /d %~dp0
+streamlit run app.py
+pause
+
+**delete everything here**
+After you delete everything here, you need to this .txt file into .bat file
+**delete everything here
