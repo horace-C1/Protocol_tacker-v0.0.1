@@ -6,12 +6,26 @@ import pandas as pd
 from datetime import datetime
 from io import StringIO
 import dropbox
+from dropbox.oauth import DropboxOAuth2FlowNoRedirect
+from dropbox import Dropbox, DropboxOAuth2FlowNoRedirect, DropboxOAuth2Flow
+import requests
 
 # --- Dropbox Setup ---
-DROPBOX_ACCESS_TOKEN = st.secrets["dropbox"]["access_token"]
-DROPBOX_FILE_PATH = "/protocol_tracker/protocol_log.csv"
-dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
+def get_dropbox_client_from_refresh():
+    token_url = "https://api.dropbox.com/oauth2/token"
+    data = {
+        "refresh_token": st.secrets["dropbox"]["refresh_token"],
+        "grant_type": "refresh_token",
+        "client_id": st.secrets["dropbox"]["app_key"],
+        "client_secret": st.secrets["dropbox"]["app_secret"]
+    }
+    response = requests.post(token_url, data=data)
+    response.raise_for_status()
+    access_token = response.json()["access_token"]
+    return dropbox.Dropbox(access_token)
 
+# Call this early in your app
+dbx = get_dropbox_client_from_refresh()
 def append_to_dropbox_csv(project, task, description, status, subtasks):
     new_data = pd.DataFrame([{
         "Timestamp": datetime.now().isoformat(),
