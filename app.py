@@ -131,19 +131,26 @@ if page == "2":
 if page == "3":
     st.title("📋 Current Tasks")
 
-    projects = sorted(set(t["project"] for t in st.session_state.tasks if t["status"] != "Deleted"))
+    filtered_tasks = [t for t in st.session_state.tasks if t["status"] != "Deleted"]
+
+    projects = sorted(set(t["project"] for t in filtered_tasks))
     selected_project = st.selectbox("Filter by Project", ["All Projects"] + projects)
 
-    filtered_tasks = [
-        t for t in st.session_state.tasks
-        if (selected_project == "All Projects" or t["project"] == selected_project)
-           and t["status"] != "Deleted"
-    ]
+    if selected_project != "All Projects":
+        project_tasks = [t for t in filtered_tasks if t["project"] == selected_project]
+        task_names = sorted(set(t["task"] for t in project_tasks))
+        selected_task = st.selectbox("Filter by Task", ["All Tasks"] + task_names)
+    else:
+        project_tasks = filtered_tasks
+        selected_task = "All Tasks"
 
-    for idx, task in enumerate(filtered_tasks):
+    for idx, task in enumerate(project_tasks):
+        if selected_task != "All Tasks" and task["task"] != selected_task:
+            continue
+
         st.markdown(f"### 🗂️ {task['task']} ({task['project']})")
-        #st.markdown(f"**Status:** {task['status']}")
-        #st.markdown(f"**Description:** {task['description']}")
+        st.markdown(f"**Status:** {task['status']}")
+        st.markdown(f"**Description:** {task['description']}")
 
         if task["subtasks"]:
             st.markdown("**Subtasks:**")
