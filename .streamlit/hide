@@ -1,3 +1,0 @@
-git rm -r --cached my_secret_folder/
-git commit -m "Stop tracking secret folder"
-git push
