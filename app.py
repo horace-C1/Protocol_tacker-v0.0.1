@@ -99,6 +99,9 @@ if st.sidebar.button("📋 Current Tasks"):
 if st.sidebar.button("📅 Today's Subtasks"):
     st.query_params.update({"page": "4 Daily Tasks"})
     st.rerun()
+if st.sidebar.button("📂 Project Overview"):
+    st.query_params.update({"page": "5 Project Overview"})
+    st.rerun()
 
 # --- Create Task Page ---
 if page == "2":
