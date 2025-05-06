@@ -143,7 +143,7 @@ if page == "3":
     for idx, task in enumerate(filtered_tasks):
         st.markdown(f"### 🗂️ {task['task']} ({task['project']})")
         st.markdown(f"**Status:** {task['status']}")
-        st.markdown(f"**Description:** {task['description']}")
+        #st.markdown(f"**Description:** {task['description']}")
 
         if task["subtasks"]:
             st.markdown("**Subtasks:**")
