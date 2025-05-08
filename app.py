@@ -229,18 +229,24 @@ if page == "4":
         for (task_name, project_name), sublist in grouped_tasks.items():
             st.markdown(f"### 🔹 From Task: *{task_name}*, Project: *{project_name}*")
             for sub_idx, subtask, task_idx in sublist:
+                status = subtask["status"]
+                sub_num = int(subtask["date_code"])
+        
+                # Skip subtasks completed before today
+                if status == "Completed" and sub_num < today_num:
+                    continue
+        
                 col1, col2 = st.columns([6, 1])
                 with col1:
-                    status = subtask["status"]
                     title = subtask["title"]
-
+        
                     if status == "Completed":
                         st.markdown(f"<span style='color:gray'><s>{title}</s></span>", unsafe_allow_html=True)
-                    elif int(subtask["date_code"]) < today_num:
+                    elif sub_num < today_num:
                         st.markdown(f"<span style='color:red'>[Overdue] {title}</span>", unsafe_allow_html=True)
                     else:
                         st.markdown(f"**{title}**")
-
+        
                 with col2:
                     if status != "Completed":
                         if st.button("✅", key=f"complete-today-{task_idx}-{sub_idx}"):
