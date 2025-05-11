@@ -232,7 +232,7 @@ if page == "3":
 # --- Part 4: Daily Tasks Page ---
 if page == "4":
     st.title("📅 Today's Subtasks")
-    
+
     from datetime import datetime
     from zoneinfo import ZoneInfo
 
@@ -240,34 +240,66 @@ if page == "4":
     today_code = now_central.strftime("%m%d")
     today_num = int(today_code)
 
-    grouped_tasks = {}  # {(task, project): [subtasks]}
+    grouped_tasks = {}  # {(task, project, task_idx): [subtasks]}
 
     for idx, task in enumerate(st.session_state.tasks):
         for sub_idx, subtask in enumerate(task["subtasks"]):
             sub_num = int(subtask["date_code"])
             status = subtask["status"]
 
-            # Show only tasks due today or overdue (and not yet completed)
+            # Show only tasks due today or overdue (and not yet completed before today)
             if sub_num <= today_num and not (status == "Completed" and sub_num < today_num):
-                key = (task["task"], task["project"])
-                if key not in grouped_tasks:
-                    grouped_tasks[key] = []
-                grouped_tasks[key].append((sub_idx, subtask, idx))  # (sub_idx, subtask, task_idx)
+                key = (task["task"], task["project"], idx)
+                grouped_tasks.setdefault(key, []).append((sub_idx, subtask, idx))
 
     if not grouped_tasks:
         st.info("No subtasks due today or earlier.")
     else:
-        for (task_name, project_name), sublist in grouped_tasks.items():
-            st.markdown(f"### 🔹 From Task: *{task_name}*, Project: *{project_name}*")
-            for sub_idx, subtask, task_idx in sublist:
+        for (task_name, project_name, task_idx), sublist in grouped_tasks.items():
+            # Filter visible subtasks
+            visible_subs = [
+                (sub_idx, subtask, task_idx) for sub_idx, subtask, task_idx in sublist
+                if not (subtask["status"] == "Completed" and int(subtask["date_code"]) < today_num)
+            ]
+
+            if not visible_subs:
+                continue
+
+            col1, col2 = st.columns([6, 1])
+            with col1:
+                st.markdown(f"### 🔹 From Task: *{task_name}*, Project: *{project_name}*")
+            with col2:
+                if st.button("✏️ Edit", key=f"edit-{task_idx}"):
+                    st.session_state.edit_mode[task_idx] = True
+
+            if st.session_state.edit_mode.get(task_idx, False):
+                new_desc = st.text_area("Edit Description", value=st.session_state.tasks[task_idx]["description"], key=f"desc-edit-{task_idx}")
+                if st.button("💾 Save", key=f"save-{task_idx}"):
+                    new_subtasks = extract_subtasks(new_desc)
+                    st.session_state.tasks[task_idx]["description"] = new_desc
+                    st.session_state.tasks[task_idx]["subtasks"] = new_subtasks
+
+                    # Save to local DB
+                    conn = sqlite3.connect("tasks.db")
+                    c = conn.cursor()
+                    c.execute("UPDATE tasks SET description = ?, subtasks = ? WHERE project = ? AND task = ?",
+                              (new_desc, json.dumps(new_subtasks), project_name, task_name))
+                    conn.commit()
+                    conn.close()
+
+                    st.session_state.edit_mode[task_idx] = False
+                    st.rerun()
+
+            for sub_idx, subtask, task_idx in visible_subs:
                 col1, col2 = st.columns([6, 1])
                 with col1:
                     status = subtask["status"]
                     title = subtask["title"]
+                    sub_num = int(subtask["date_code"])
 
                     if status == "Completed":
                         st.markdown(f"<span style='color:gray'><s>{title}</s></span>", unsafe_allow_html=True)
-                    elif int(subtask["date_code"]) < today_num:
+                    elif sub_num < today_num:
                         st.markdown(f"<span style='color:red'>[Overdue] {title}</span>", unsafe_allow_html=True)
                     else:
                         st.markdown(f"**{title}**")
@@ -277,7 +309,7 @@ if page == "4":
                         if st.button("✅", key=f"complete-today-{task_idx}-{sub_idx}"):
                             st.session_state.tasks[task_idx]["subtasks"][sub_idx]["status"] = "Completed"
 
-                            # Update DB
+                            # Update local DB
                             conn = sqlite3.connect("tasks.db")
                             c = conn.cursor()
                             c.execute("UPDATE tasks SET subtasks = ? WHERE project = ? AND task = ?",
