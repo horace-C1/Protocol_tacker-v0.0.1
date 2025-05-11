@@ -227,6 +227,16 @@ if page == "4":
         st.info("No subtasks due today or earlier.")
     else:
         for (task_name, project_name), sublist in grouped_tasks.items():
+            # Filter visible subtasks (due today or earlier and not completed before today)
+            visible_subs = [
+                (sub_idx, subtask, task_idx) for sub_idx, subtask, task_idx in sublist
+                if not (subtask["status"] == "Completed" and int(subtask["date_code"]) < today_num)
+            ]
+        
+            # Skip entire task group if no subtasks are visible
+            if not visible_subs:
+                continue
+        
             st.markdown(f"### 🔹 From Task: *{task_name}*, Project: *{project_name}*")
             for sub_idx, subtask, task_idx in sublist:
                 status = subtask["status"]
