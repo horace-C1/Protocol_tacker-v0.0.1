@@ -220,13 +220,13 @@ if page == "4":
 
             # Show only if due today or overdue
             if sub_num <= today_num:
-                key = (task["task"], task["project"])
+                key = (task["task"], task["project"], idx)
                 grouped_tasks.setdefault(key, []).append((sub_idx, subtask, idx))
 
     if not grouped_tasks:
         st.info("No subtasks due today or earlier.")
     else:
-        for (task_name, project_name), sublist in grouped_tasks.items():
+        for (task_name, project_name, task_idx), sublist in grouped_tasks.items():
             # Filter visible subtasks (due today or earlier and not completed before today)
             visible_subs = [
                 (sub_idx, subtask, task_idx) for sub_idx, subtask, task_idx in sublist
@@ -236,8 +236,29 @@ if page == "4":
             # Skip entire task group if no subtasks are visible
             if not visible_subs:
                 continue
-        
-            st.markdown(f"### 🔹 From Task: *{task_name}*, Project: *{project_name}*")
+            col1, col2 = st.columns([6, 1])
+            with col1:
+                st.markdown(f"### 🔹 From Task: *{task_name}*, Project: *{project_name}*")
+            with col2:
+                if st.button("✏️ Edit", key=f"edit-{task_idx}"):
+                    st.session_state.edit_mode[task_idx] = True
+                    
+            if st.session_state.edit_mode.get(task_idx, False):
+                new_desc = st.text_area("Edit Description", value=st.session_state.tasks[task_idx]["description"], key=f"desc-edit-{task_idx}")
+                if st.button("💾 Save", key=f"save-{task_idx}"):
+                    new_subtasks = extract_subtasks(new_desc)
+                    st.session_state.tasks[task_idx]["description"] = new_desc
+                    st.session_state.tasks[task_idx]["subtasks"] = new_subtasks
+                    append_to_dropbox_csv(
+                        st.session_state.tasks[task_idx]["project"],
+                        st.session_state.tasks[task_idx]["task"],
+                        new_desc,
+                        st.session_state.tasks[task_idx]["status"],
+                        new_subtasks
+                    )
+                    st.session_state.edit_mode[task_idx] = False
+                    st.rerun()
+
             for sub_idx, subtask, task_idx in sublist:
                 status = subtask["status"]
                 sub_num = int(subtask["date_code"])
