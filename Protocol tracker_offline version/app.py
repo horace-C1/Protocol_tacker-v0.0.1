@@ -72,8 +72,9 @@ if "edit_mode" not in st.session_state:
     st.session_state.edit_mode = {}
 
 # --- Read page from query params (default to Dashboard) ---
+st.set_page_config(page_title="Protocol Tracker", layout="wide")
 query_params = st.query_params
-page = query_params.get("page", ["Dashboard"])[0]
+page = query_params.get("page", ["1 Dashboard"])[0]
 
 # --- Manual navigation buttons in sidebar ---
 st.sidebar.title("Navigation")
