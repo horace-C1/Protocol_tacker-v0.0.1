@@ -182,21 +182,10 @@ if page == "3":
             with col_main:
                 st.markdown(f"### 🗂️ {task['task']} ({task['project']})")
                 st.markdown(f"**Main Status:** {task['status']}")
-                if task["subtasks"]:
-                    st.markdown("**Subtasks:**")
-                    for sub_idx, sub in enumerate(task["subtasks"]):
-                        s1, s2 = st.columns([20, 1])
-                        with s1:
-                            st.markdown(f"```\n{task['description']}\n```")
-                        with s2:
-                            if st.button("✅", key=f"complete-{idx}-{sub_idx}"):
-                                task["subtasks"][sub_idx]["status"] = "Completed"
-                                conn = sqlite3.connect("tasks.db")
-                                c = conn.cursor()
-                                c.execute("UPDATE tasks SET subtasks = ? WHERE project = ? AND task = ?", (json.dumps(task["subtasks"]), task["project"], task["task"]))
-                                conn.commit()
-                                conn.close()
-                                st.rerun()
+
+                # ✅ Display description as raw subtasks
+                st.markdown("**Steps:**")
+                st.markdown(f"```\n{task['description']}\n```")
 
             with col_del:
                 if st.button("🗑️", key=f"delete-{idx}"):
