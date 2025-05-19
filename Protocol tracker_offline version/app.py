@@ -187,7 +187,8 @@ if page == "3":
                     for sub_idx, sub in enumerate(task["subtasks"]):
                         s1, s2 = st.columns([20, 1])
                         with s1:
-                            st.markdown(f"- [{sub['status']}] **{sub['date_str']}**: {sub['title']}")
+                            st.markdown("**Task Description:**")
+                            st.markdown(f"> {task['description']}")
                         with s2:
                             if st.button("✅", key=f"complete-{idx}-{sub_idx}"):
                                 task["subtasks"][sub_idx]["status"] = "Completed"
