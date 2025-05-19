@@ -166,18 +166,30 @@ if page == "3":
             st.download_button("⬇️ Download CSV", f, file_name=filename, mime="text/csv", key="download-csv")
 
     if st.session_state.tasks:
+        # --- Filter by Project ---
         projects = sorted(set(t["project"] for t in st.session_state.tasks))
         selected_project = st.selectbox("Filter by Project", ["All Projects"] + projects)
 
-        filtered = [t for t in st.session_state.tasks if selected_project == "All Projects" or t["project"] == selected_project]
-        tasks = sorted(t["task"] for t in filtered)
+        # --- Filter by Status ---
+        statuses = sorted(set(t["status"] for t in st.session_state.tasks))
+        selected_status = st.selectbox("Filter by Status", ["All Statuses"] + statuses)
+
+        # --- Apply project and status filters ---
+        filtered = [
+            t for t in st.session_state.tasks
+            if (selected_project == "All Projects" or t["project"] == selected_project)
+               and (selected_status == "All Statuses" or t["status"] == selected_status)
+        ]
+
+        # --- Filter by Task Name (after applying project and status filters) ---
+        tasks = sorted(set(t["task"] for t in filtered))
         selected_task = st.selectbox("Filter by Task", ["All Tasks"] + tasks)
 
         if selected_task != "All Tasks":
             filtered = [t for t in filtered if t["task"] == selected_task]
 
         for idx, task in enumerate(filtered):
-            col_main, col_del, col_edit = st.columns([10, 1, 1])
+            col_main, col_del, col_edit, col_complete = st.columns([10, 1, 1 ,1])
 
             with col_main:
                 st.markdown(f"### 🗂️ {task['task']} ({task['project']})")
@@ -195,6 +207,17 @@ if page == "3":
                     conn.commit()
                     conn.close()
                     st.session_state.tasks.pop(idx)
+                    st.rerun()
+
+            with col_complete:
+                if st.button("✅", key=f"complete-task-{idx}"):
+                    task["status"] = "Completed"
+                    conn = sqlite3.connect("tasks.db")
+                    c = conn.cursor()
+                    c.execute("UPDATE tasks SET status = ? WHERE project = ? AND task = ?",
+                              (task["status"], task["project"], task["task"]))
+                    conn.commit()
+                    conn.close()
                     st.rerun()
 
             with col_edit:
