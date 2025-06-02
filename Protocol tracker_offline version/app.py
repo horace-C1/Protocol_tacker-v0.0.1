@@ -280,7 +280,7 @@ if page == "4":
 
             col1, col2 = st.columns([6, 1])
             with col1:
-                st.markdown(f"### 🔹 From Task: *{task_name}*, Project: *{project_name}*")
+                st.markdown(f"### 🔹 *{task_name}*, *{project_name}*")
             with col2:
                 if st.button("✏️ Edit", key=f"edit-{task_idx}"):
                     st.session_state.edit_mode[task_idx] = True
