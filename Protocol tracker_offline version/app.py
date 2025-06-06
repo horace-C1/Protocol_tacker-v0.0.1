@@ -342,11 +342,21 @@ if page == "5":
             projects.setdefault(task["project"], []).append(task)
 
         cols = st.columns(len(projects))
-
         for col, (project, task_list) in zip(cols, sorted(projects.items())):
             with col:
                 st.markdown(f"### {project}")
-                for task in task_list:
+                def get_status_rank(task):
+                    if not task["subtasks"]:
+                        return 2  # ⚪️ No subtasks (lowest priority)
+                    elif all(sub["status"] == "Completed" for sub in task["subtasks"]):
+                        return 1  # 🟢 All done
+                    else:
+                        return 0  # 🔴 Not completed (highest priority)
+
+                # Sort task_list by status rank
+                sorted_tasks = sorted(task_list, key=get_status_rank)
+
+                for task in sorted_tasks:
                     # Determine task status label
                     if not task["subtasks"]:
                         status_label = "⚪️ No subtasks"
