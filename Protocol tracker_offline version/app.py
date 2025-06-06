@@ -347,7 +347,17 @@ if page == "5":
             with col:
                 st.markdown(f"### {project}")
                 for task in task_list:
-                    with st.expander(f"📄 {task['task']}"):
+                    # Determine task status label
+                    if not task["subtasks"]:
+                        status_label = "⚪️ No subtasks"
+                    elif all(sub["status"] == "Completed" for sub in task["subtasks"]):
+                        status_label = "🟢 All done"
+                    elif any(sub["status"] == "In Progress" for sub in task["subtasks"]):
+                        status_label = "🟠 In progress"
+                    else:
+                        status_label = "🔴 Not started"
+                    
+                    with st.expander(f"{status_label} 📄 {task['task']}"):
                         if task["subtasks"]:
                             st.markdown("**Subtasks:**")
                             for sub in task["subtasks"]:
