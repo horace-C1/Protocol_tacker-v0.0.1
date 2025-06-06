@@ -365,7 +365,7 @@ if page == "5":
                                     color = "orange"
                                 else:
                                     color = "red"
-                                st.markdown(f"<span style='color:{color}'>[{status}] {sub['date_str']}: {sub['title']}</span>", unsafe_allow_html=True)
+                                st.markdown(f"<span style='color:{color}'> {sub['date_str']}: {sub['title']}</span>", unsafe_allow_html=True)
                         else:
                             st.markdown("_No subtasks found._")
     else:
