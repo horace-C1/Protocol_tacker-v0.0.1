@@ -351,13 +351,10 @@ if page == "5":
                     if not task["subtasks"]:
                         status_label = "⚪️ No subtasks"
                     elif all(sub["status"] == "Completed" for sub in task["subtasks"]):
-                        status_label = "🟢 All done"
-                    elif any(sub["status"] == "In Progress" for sub in task["subtasks"]):
-                        status_label = "🟠 In progress"
+                        status_label = "🟢 "
                     else:
-                        status_label = "🔴 Not started"
-                    
-                    with st.expander(f"{status_label} 📄 {task['task']}"):
+                        status_label = "🔴 "
+                    with st.expander(f"{status_label}  {task['task']}"):
                         if task["subtasks"]:
                             st.markdown("**Subtasks:**")
                             for sub in task["subtasks"]:
