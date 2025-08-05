@@ -6,7 +6,24 @@ import re
 import pandas as pd
 from datetime import datetime
 
-# backup for new updates
+
+import sqlite3
+
+conn = sqlite3.connect("tasks.db")
+c = conn.cursor()
+
+# Add 'created_at' column if it doesn't exist
+try:
+    c.execute("ALTER TABLE tasks ADD COLUMN created_at TEXT")
+except sqlite3.OperationalError as e:
+    if "duplicate column name" not in str(e):
+        raise  # re-raise other errors
+
+conn.commit()
+conn.close()
+
+
+# backup for new update
 # --- Extract subtasks from description ---
 def extract_subtasks(description_text):
     subtasks = []
@@ -129,26 +146,34 @@ if page == "2":
     task = st.text_input("Task")
     description = st.text_area("Task Description (or steps)")
     status = st.selectbox("Status", ["Not Started", "In Progress", "Completed"])
-
+    
+    from datetime import datetime
+    
     if st.button("Save Task"):
         if project and task:
             subtasks = extract_subtasks(description)
+            created_at = datetime.now().isoformat()  # <- add this
+    
+            # Save to SQLite (add 'created_at' field to the table if not already there)
             conn = sqlite3.connect("tasks.db")
             c = conn.cursor()
             c.execute('''
-                INSERT INTO tasks (project, task, description, status, subtasks)
-                VALUES (?, ?, ?, ?, ?)''',
-                (project, task, description, status, json.dumps(subtasks)))
+                INSERT INTO tasks (project, task, description, status, subtasks, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)''',
+                (project, task, description, status, json.dumps(subtasks), created_at))
             conn.commit()
             conn.close()
-
+    
+            # Save to session state
             st.session_state.tasks.append({
                 "project": project,
                 "task": task,
                 "description": description,
                 "status": status,
-                "subtasks": subtasks
+                "subtasks": subtasks,
+                "created_at": created_at  # <- add this
             })
+    
             st.success(f"Task '{task}' under project '{project}' saved!")
             st.rerun()
         else:
@@ -188,6 +213,14 @@ if page == "3":
 
         if selected_task != "All Tasks":
             filtered = [t for t in filtered if t["task"] == selected_task]
+
+        from datetime import datetime
+
+        # Sort tasks by created_at descending (most recent on top)
+        filtered.sort(
+            key=lambda t: datetime.fromisoformat(t.get("created_at", "2000-01-01T00:00:00")),
+            reverse=True
+        )
 
         for idx, task in enumerate(filtered):
             col_main, col_del, col_edit, col_complete = st.columns([10, 1, 1 ,1])
@@ -435,5 +468,6 @@ if page == "1":
         if st.button("📂 Project Overview", key="nav-projects-btn"):
             st.query_params.update({"page": "5"})
             st.rerun()
+
 
 
